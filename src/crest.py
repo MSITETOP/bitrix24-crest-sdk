@@ -7,8 +7,8 @@ class CRest(object):
 
   C_REST_WEB_HOOK_URL = False  #url on creat Webhook 'https://ntp.t2.ipg4you.com/rest/1/yuphimh7y4mmjusu/'
   #OR
-  C_REST_CLIENT_ID = 'local.638648ab1a8025.42091559' # Application ID
-  C_REST_CLIENT_SECRET = 'I2NHy1okBCaz3MukwZeKlVkER2U1hW3IyYWu62JH7q5yssDXXO'# Application key
+  C_REST_CLIENT_ID = 'local.638648ab1a8025.42091557' # Application ID
+  C_REST_CLIENT_SECRET = 'I2NHy1okBCaz3MukwZeKlVkER2U1hW3IyYWu62JH7q5yssDXX2'# Application key
 
   C_REST_IGNORE_SSL = True # turn off validate ssl by curl
 
