@@ -1,46 +1,21 @@
-from logging import info
-from time import sleep
+import logging
 import requests
-import urllib.parse
-import os
 import json
 
 class CRest(object):
   BATCH_COUNT = 50
 
+  C_REST_WEB_HOOK_URL = False  #url on creat Webhook 'https://ntp.t2.ipg4you.com/rest/1/yuphimh7y4mmjusu/'
+  #OR
   C_REST_CLIENT_ID = 'local.638648ab1a8025.42091559' # Application ID
   C_REST_CLIENT_SECRET = 'I2NHy1okBCaz3MukwZeKlVkER2U1hW3IyYWu62JH7q5yssDXXO'# Application key
 
-  C_REST_CURRENT_ENCODING = 'UTF-8' #set current encoding site if encoding unequal UTF-8 to use iconv() windows-1251
-
   C_REST_IGNORE_SSL = True # turn off validate ssl by curl
 
-  C_REST_TIMEOUT = 30 # ttimeout by curl
+  C_REST_TIMEOUT = 30 # timeout by curl
 
-  def __init__(self, member_id):
-    self.member_id = member_id
-
-  # Can overridden this method to change the data storage location.
-  # return array setting for getAppSettings()
-  def __getSettingData(self):
-    try:
-      with open("settings.json", "r") as my_file:
-        capitals_json = my_file.read()
-
-      return json.loads(capitals_json)
-    except:
-      return False
-
-  # Can overridden this method to change the data storage location.
-  # var $arSettings array settings application
-  # return boolean is successes save data for setSettingData()
-  def __setSettingData(self, arSettings):
-    try:
-      with open("settings.json", "w") as outfile:
-        json.dump(arSettings, outfile)
-      return True
-    except:
-      return False
+  def __init__(self, member_id = ''):
+    self.__member_id = member_id
 
   # call where install application even url
   def installApp(self, arParams):
@@ -63,25 +38,24 @@ class CRest(object):
         }
         result['install'] = self.__setAppSettings(arSettings, True);
 
-    self.__setLog(
-      {
-        'request': arParams,
-        'result': result
-      },
-      'installApp'
-    )
+    logging.debug({
+      'function': 'installApp',
+      'request': arParams,
+      'result': result
+    })
 
     return result
 
-  # var $arParams array
-  # $arParams = [
-  #    'method'  => 'some rest method',
-  #    'params'  => []//array params of method
-  # ];
+  # var arParams array
+  # arParams {
+  #    'method'  : 'some rest method',
+  #    'params'  : {}//array params of method
+  # }
   # return mixed array|string|boolean curl-return or error
   def __callCurl(self, arParams):
     result = {}
     arSettings = self.__getAppSettings()
+
     if arSettings:
         if arParams.get('this_auth') == 'Y':
           url = 'https://oauth.bitrix.info/oauth/token/'
@@ -89,14 +63,16 @@ class CRest(object):
           url = arSettings.get("client_endpoint") + arParams.get('method') + '.json'
           if arSettings.get('is_web_hook') or arSettings.get('is_web_hook') != 'Y':
             arParams[ 'params' ][ 'auth' ] = arSettings.get('access_token')
+    else:
+      result['error'] = 'arSettings is not a set'
+      return result
 
     try:
       session = requests.Session()
       session.verify = self.C_REST_IGNORE_SSL
-      session.timeout = self.C_REST_TIMEOUT
       params = arParams.get('params')
 
-      req  = session.post(url, data=params)
+      req  = session.post(url, data=params, timeout=self.C_REST_TIMEOUT)
 
       statusCode = req.status_code
       jsonBody = req.json()
@@ -109,27 +85,25 @@ class CRest(object):
       else:
         result = jsonBody
     except requests.exceptions.Timeout:
-        result['error'] = 'Maybe set up for a retry, or continue in a retry loop'
+        result['error'] = 'Increase the Timeout'
     except requests.exceptions.TooManyRedirects:
         result['error'] = 'Tell the user their URL was bad and try a different one'
     except requests.exceptions.RequestException as e:
         result['error'] = e
 
 
-    self.__setLog(
-        {
-              'url'    : url,
-              'params' : arParams,
-              'result' : result
-        },
-        'callCurl'
-    )
+    logging.debug({
+      'function': 'callCurl',
+      'url'    : url,
+      'params' : arParams,
+      'result' : result
+    })
 
     return result
 
   # Generate a request for callCurl()
-  # var $method string
-  # var $params array method params
+  # var method string
+  # var params array method params
   # return mixed array|string|boolean curl-return or error
   def call(self, method, params = {}):
     arPost = {
@@ -137,36 +111,30 @@ class CRest(object):
       'params': params
     }
 
-    if self.C_REST_CURRENT_ENCODING != 'UTF-8':
-      arPost['params'] = self.__changeEncoding(arPost.get('params'))
-
     result = self.__callCurl(arPost)
     return result
 
-  # example $arData:
-  # $arData = [
-  #    'find_contact' => [
-  #      'method' => 'crm.duplicate.findbycomm',
-  #      'params' => [ "entity_type" => "CONTACT",  "type" => "EMAIL", "values" => array("infobitrix24.com") ]
-  #    ],
-  #    'get_contact' => [
-  #      'method' => 'crm.contact.get',
-  #      'params' => [ "id" => '$result[find_contact][CONTACT][0]' ]
-  #    ],
-  #    'get_company' => [
-  #      'method' => 'crm.company.get',
-  #      'params' => [ "id" => '$result[get_contact][COMPANY_ID]', "select" => ["*"],]
-  #    ]
-  # ];
-  # var $arData array
-  # var $halt   integer 0 or 1 stop batch on error
+  # example arData:
+  # arData = {
+  #    'find_contact' : {
+  #      'method' : 'crm.duplicate.findbycomm',
+  #      'params' : [ "entity_type" : "CONTACT",  "type" : "EMAIL", "values" : array("infobitrix24.com") ]
+  #    },
+  #    'get_contact' : {
+  #      'method' : 'crm.contact.get',
+  #      'params' : [ "id" : '$result[find_contact][CONTACT][0]' ]
+  #    },
+  #    'get_company' : {
+  #      'method' : 'crm.company.get',
+  #      'params' : [ "id" : '$result[get_contact][COMPANY_ID]', "select" : ["*"],]
+  #    }
+  # }
+  # var arData array
+  # var halt   integer 0 or 1 stop batch on error
   # return array
   def callBatch(self, arData, halt = 0):
     arResult = {}
     if type(arData) is dict:
-      if self.C_REST_CURRENT_ENCODING != 'UTF-8':
-        arData = self.__changeEncoding(arData)
-
       arDataRest = {}
 
       if len(arDataRest) > 0:
@@ -180,19 +148,19 @@ class CRest(object):
     return arResult
 
   # Getting a new authorization and sending a request for the 2nd time
-  # var $arParams array request when authorization error returned
+  # var arParams array request when authorization error returned
   # return array query result from $arParams
   def __GetNewAuth(self, arParams):
     result = {}
     arSettings = self.__getAppSettings()
-    if arSettings != False:
+    if arSettings:
       arParamsAuth = {
         'this_auth' : 'Y',
         'params'    :
           {
-            'client_id'     : arSettings.get('C_REST_CLIENT_ID'),
+            'client_id'     : self.C_REST_CLIENT_ID,
             'grant_type'    : 'refresh_token',
-            'client_secret' : arSettings.get('C_REST_CLIENT_SECRET'),
+            'client_secret' : self.C_REST_CLIENT_SECRET,
             'refresh_token' : arSettings.get("refresh_token"),
           }
       }
@@ -205,33 +173,30 @@ class CRest(object):
 
     return result
 
-  # var $arSettings array settings application
-  # var $isInstall  boolean true if install app by installApp()
+  # var arSettings array settings application
+  # var isInstall  boolean true if install app by installApp()
   # return boolean
   def __setAppSettings(self, arSettings, isInstall = False):
-    config = False
-    if len(arSettings):
-      oldData = self.__getAppSettings();
-      if isInstall != True and len(oldData):
-          arSettings = oldData.update(arSettings)
-      config = self.__setSettingData(arSettings)
-    return config
+    try:
+      with open("settings.json", "w") as outfile:
+        json.dump(arSettings, outfile)
+      return True
+    except:
+      return False
 
   # return mixed setting application for query
   def __getAppSettings(self):
-    return self.__getSettingData()
+    if self.C_REST_WEB_HOOK_URL != False:
+      arData = {
+        'client_endpoint' : self.C_REST_WEB_HOOK_URL,
+        'is_web_hook'     : 'Y'
+      }
+      return arData
+    else:
+      try:
+        with open("settings.json", "r") as my_file:
+          capitals_json = my_file.read()
 
-  # var $data mixed
-  # var $encoding boolean true - encoding to utf8, false - decoding
-  # return string json_encode with encoding
-  def __changeEncoding(self, data, encoding = True):
-    return True
-
-  # Can overridden this method to change the log data storage location.
-  # var $arData array of logs data
-  # var $type   string to more identification log data
-  # return boolean is successes save log data
-  def __setLog(self, arData, type = ''):
-    info([arData, type])
-  
-    
+        return json.loads(capitals_json)
+      except:
+        return False
