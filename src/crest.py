@@ -135,16 +135,28 @@ class CRest(object):
   def callBatch(self, arData, halt = 0):
     arResult = {}
     if type(arData) is dict:
-      arDataRest = {}
+      arDataRest = {
+        'cmd' : {},
+        'halt': halt
+      }
+      i = 0
+      for key in arData:
+        data = arData.get(key)
+        if data.get('method'):
+          i = i + 1
+          if self.BATCH_COUNT >= i:
+            if data.get('params') and len(data.get('params'))>0:
+               arDataRest[ 'cmd' ][ key ] = data.get('method') + "?" + urllib.parse.urlencode(data.get('params'), doseq=True)
+            else:
+               arDataRest[ 'cmd' ][ key ] = data.get('method')
 
       if len(arDataRest) > 0:
-        arDataRest['halt'] = halt
         arPost = {
           'method' : 'batch',
           'params' : arDataRest
         }
         arResult = self.__callCurl(arPost)
-    
+
     return arResult
 
   # Getting a new authorization and sending a request for the 2nd time
